@@ -1,3 +1,16 @@
+:root {
+  --app-bg: #f0f2f5;
+  --sidebar-bg: #001529;
+  --sidebar-width: 220px;
+  --sidebar-collapsed: 64px;
+  --header-height: 56px;
+  --page-padding: 20px;
+  --card-radius: 8px;
+  --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.04);
+  --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.06);
+  color-scheme: light;
+}
+
 * {
   margin: 0;
   padding: 0;
@@ -10,11 +23,65 @@ html, body {
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC',
     'Hiragino Sans GB', 'Microsoft YaHei', 'Helvetica Neue', Helvetica, Arial,
     sans-serif;
+  font-size: 14px;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+  background: var(--app-bg);
 }
 
 #app {
   width: 100%;
   height: 100%;
+}
+
+/* Scrollbar */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #c0c4cc;
+  border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #909399;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+/* Page fade transition */
+.page-fade-enter-active,
+.page-fade-leave-active {
+  transition: opacity 0.2s ease;
+}
+
+.page-fade-enter-from,
+.page-fade-leave-to {
+  opacity: 0;
+}
+
+/* Element Plus overrides */
+.el-card {
+  border-radius: var(--card-radius) !important;
+  box-shadow: var(--shadow-sm) !important;
+}
+
+.el-button {
+  border-radius: 6px;
+}
+
+.el-divider--horizontal {
+  margin: 16px 0;
+}
+
+.el-menu {
+  border-right: none !important;
+}
+
+.el-empty__description {
+  color: #909399;
 }

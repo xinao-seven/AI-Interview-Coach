@@ -1,17 +1,10 @@
 <script setup lang="ts">
-import { ref, computed, watch } from 'vue'
+import { ref, computed } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
-import { ElMessage } from 'element-plus'
 import {
-  HomeFilled,
-  Document,
-  Setting,
-  Edit,
-  ChatDotRound,
-  Notebook,
-  DataAnalysis,
-  Collection,
-  Tools,
+  HomeFilled, Document, Setting, Edit, ChatDotRound,
+  Notebook, DataAnalysis, Collection, Tools,
+  Fold, Expand,
 } from '@element-plus/icons-vue'
 
 const router = useRouter()
@@ -31,9 +24,7 @@ const menuItems = [
   { path: '/settings', title: '设置', icon: Tools },
 ]
 
-const activeMenu = computed(() => {
-  return route.path
-})
+const activeMenu = computed(() => route.path)
 
 function handleMenuSelect(path: string) {
   router.push(path)
@@ -41,19 +32,23 @@ function handleMenuSelect(path: string) {
 </script>
 
 <template>
-  <el-container class="main-container">
-    <el-aside :width="isCollapsed ? '64px' : '220px'" class="app-aside">
-      <div class="logo-area">
-        <span v-if="!isCollapsed" class="logo-text">AI 面试教练</span>
-        <span v-else class="logo-text--short">AI</span>
+  <div class="app-shell">
+    <aside class="app-sidebar" :class="{ collapsed: isCollapsed }">
+      <div class="sidebar-brand">
+        <span class="brand-icon">🤖</span>
+        <transition name="fade">
+          <span v-if="!isCollapsed" class="brand-text">AI 面试教练</span>
+        </transition>
       </div>
+
       <el-menu
         :default-active="activeMenu"
         :collapse="isCollapsed"
         :collapse-transition="false"
-        background-color="#001529"
-        text-color="#ffffffa6"
+        background-color="transparent"
+        text-color="rgba(255,255,255,0.65)"
         active-text-color="#fff"
+        class="sidebar-menu"
         @select="handleMenuSelect"
       >
         <el-menu-item v-for="item in menuItems" :key="item.path" :index="item.path">
@@ -61,102 +56,183 @@ function handleMenuSelect(path: string) {
           <template #title>{{ item.title }}</template>
         </el-menu-item>
       </el-menu>
-    </el-aside>
 
-    <el-container class="app-main">
-      <el-header class="app-header">
-        <div class="header-left">
-          <el-icon
-            class="collapse-btn"
-            :size="20"
-            @click="isCollapsed = !isCollapsed"
-          >
-            <component :is="isCollapsed ? 'Expand' : 'Fold'" />
-          </el-icon>
-          <span class="header-title">{{ route.meta.title || 'AI 面试教练' }}</span>
+      <div class="sidebar-footer">
+        <el-tooltip :content="isCollapsed ? '展开菜单' : '收起菜单'" placement="right">
+          <div class="collapse-toggle" @click="isCollapsed = !isCollapsed">
+            <el-icon :size="18">
+              <Fold v-if="!isCollapsed" />
+              <Expand v-else />
+            </el-icon>
+          </div>
+        </el-tooltip>
+      </div>
+    </aside>
+
+    <div class="app-body">
+      <header class="app-topbar">
+        <div class="topbar-left">
+          <el-breadcrumb separator=">">
+            <el-breadcrumb-item :to="{ path: '/dashboard' }">首页</el-breadcrumb-item>
+            <el-breadcrumb-item v-if="route.meta.title && route.path !== '/dashboard'">
+              {{ route.meta.title }}
+            </el-breadcrumb-item>
+          </el-breadcrumb>
         </div>
-        <div class="header-right">
-          <span class="header-subtitle">AI 驱动的面试训练平台</span>
+        <div class="topbar-right">
+          <span class="topbar-tagline">AI 驱动的面试训练平台</span>
         </div>
-      </el-header>
-      <el-main class="app-content">
-        <router-view />
-      </el-main>
-    </el-container>
-  </el-container>
+      </header>
+
+      <main class="app-main">
+        <router-view v-slot="{ Component }">
+          <transition name="page-fade" mode="out-in">
+            <component :is="Component" />
+          </transition>
+        </router-view>
+      </main>
+    </div>
+  </div>
 </template>
 
 <style scoped>
-.main-container {
+.app-shell {
+  display: flex;
   height: 100vh;
-}
-
-.app-aside {
-  background-color: #001529;
   overflow: hidden;
-  transition: width 0.3s ease;
 }
 
-.logo-area {
-  height: 64px;
+/* Sidebar */
+.app-sidebar {
+  width: var(--sidebar-width);
+  display: flex;
+  flex-direction: column;
+  background: linear-gradient(180deg, #001529 0%, #002140 100%);
+  transition: width 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+  flex-shrink: 0;
+  overflow: hidden;
+}
+
+.app-sidebar.collapsed {
+  width: var(--sidebar-collapsed);
+}
+
+.sidebar-brand {
+  height: var(--header-height);
   display: flex;
   align-items: center;
   justify-content: center;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  gap: 10px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
 }
 
-.logo-text {
+.brand-icon {
+  font-size: 22px;
+  flex-shrink: 0;
+}
+
+.brand-text {
   color: #fff;
-  font-size: 18px;
+  font-size: 16px;
   font-weight: 700;
   white-space: nowrap;
+  letter-spacing: 0.5px;
 }
 
-.logo-text--short {
+.sidebar-menu {
+  flex: 1;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding: 8px 0;
+}
+
+.sidebar-menu .el-menu-item {
+  margin: 2px 8px;
+  border-radius: 8px;
+  height: 44px;
+  line-height: 44px;
+  transition: all 0.2s;
+}
+
+.sidebar-menu .el-menu-item:hover {
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.sidebar-menu .el-menu-item.is-active {
+  background: linear-gradient(135deg, #409eff, #337ecc);
   color: #fff;
-  font-size: 18px;
-  font-weight: 700;
 }
 
-.app-header {
-  background: #fff;
+.sidebar-footer {
+  padding: 12px;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.collapse-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 36px;
+  border-radius: 8px;
+  cursor: pointer;
+  color: rgba(255, 255, 255, 0.45);
+  transition: all 0.2s;
+}
+
+.collapse-toggle:hover {
+  background: rgba(255, 255, 255, 0.08);
+  color: rgba(255, 255, 255, 0.85);
+}
+
+/* Body */
+.app-body {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.app-topbar {
+  height: var(--header-height);
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 0 20px;
-  border-bottom: 1px solid #e4e7ed;
-  height: 64px;
+  padding: 0 24px;
+  background: #fff;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.04);
+  z-index: 10;
+  flex-shrink: 0;
 }
 
-.header-left {
+.topbar-left {
   display: flex;
   align-items: center;
-  gap: 12px;
 }
 
-.collapse-btn {
-  cursor: pointer;
-  color: #606266;
+.topbar-right {
+  display: flex;
+  align-items: center;
 }
 
-.collapse-btn:hover {
-  color: #409eff;
-}
-
-.header-title {
-  font-size: 16px;
-  font-weight: 600;
-  color: #303133;
-}
-
-.header-subtitle {
+.topbar-tagline {
   font-size: 13px;
   color: #909399;
 }
 
-.app-content {
-  background: #f5f7fa;
-  padding: 20px;
+.app-main {
+  flex: 1;
+  padding: var(--page-padding);
   overflow-y: auto;
+  background: var(--app-bg);
+}
+
+/* Transitions */
+.fade-enter-active,
+.fade-leave-active {
+  transition: opacity 0.2s;
+}
+.fade-enter-from,
+.fade-leave-to {
+  opacity: 0;
 }
 </style>
