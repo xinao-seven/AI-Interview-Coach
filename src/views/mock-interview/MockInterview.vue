@@ -7,6 +7,7 @@ import { useReportStore } from '@/stores/modules/report'
 import { useResumeStore } from '@/stores/modules/resume'
 import { evaluateAnswerApi, generateReportApi } from '@/api/modules/ai'
 import { simulateStream } from '@/utils/sse'
+import MarkdownRenderer from '@/components/MarkdownRenderer.vue'
 import type { ChatMessage, AnswerEvaluation } from '@/types/interview'
 import type { InterviewReport } from '@/types/report'
 
@@ -524,7 +525,11 @@ const modeLabel = computed(() => {
             </div>
             <div class="msg-bubble" :class="`bubble-${msg.role}`">
               <div class="msg-content">
-                <span v-if="msg.content">{{ msg.content }}</span>
+                <MarkdownRenderer
+                  v-if="msg.content"
+                  :content="msg.content"
+                  variant="chat"
+                />
                 <span v-if="msg.status === 'streaming'" class="streaming-cursor">▍</span>
               </div>
             </div>

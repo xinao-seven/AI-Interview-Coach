@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref } from 'vue'
 import type { QuestionReview } from '@/types/report'
+import MarkdownRenderer from './MarkdownRenderer.vue'
 import ScoreCard from './ScoreCard.vue'
 import type { AnswerEvaluation } from '@/types/interview'
 
@@ -65,12 +66,16 @@ function toEvaluation(review: QuestionReview): AnswerEvaluation {
 
           <div class="review-section">
             <div class="review-label">参考答案</div>
-            <div class="review-text">{{ review.referenceAnswer }}</div>
+            <div class="review-text">
+              <MarkdownRenderer :content="review.referenceAnswer" variant="report" />
+            </div>
           </div>
 
           <div v-if="review.suggestion" class="review-section">
             <div class="review-label">AI 建议</div>
-            <div class="review-text suggestion">{{ review.suggestion }}</div>
+            <div class="review-text suggestion">
+              <MarkdownRenderer :content="review.suggestion" variant="report" />
+            </div>
           </div>
         </div>
       </el-collapse-item>
