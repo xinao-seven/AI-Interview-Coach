@@ -304,8 +304,10 @@ async function handleFinish() {
       try {
         const report = await generateReportApi(session)
         reportStore.setReport(report)
+        saveInterviewHistory(report)
       } catch {
         generateLocalReport()
+        saveInterviewHistory(null)
       }
 
       router.push('/interview-report')
@@ -373,6 +375,37 @@ function getCurrentEvaluation() {
   const q = currentQuestion.value
   if (!q) return null
   return interviewStore.evaluations.find((e) => e.questionId === q.id) || null
+}
+
+function saveInterviewHistory(report: InterviewReport | null) {
+  try {
+    const stored = localStorage.getItem('interview-history')
+    const history: Array<{
+      sessionId: string
+      totalScore: number
+      role: string
+      mode: string
+      questionCount: number
+      finishedAt: string
+    }> = stored ? JSON.parse(stored) : []
+
+    history.push({
+      sessionId: interviewStore.sessionId,
+      totalScore: report?.totalScore || 0,
+      role: interviewStore.config?.targetRole || '未知',
+      mode: interviewStore.config?.interviewMode || '',
+      questionCount: interviewStore.questions.length,
+      finishedAt: new Date().toISOString(),
+    })
+
+    if (history.length > 20) {
+      history.splice(0, history.length - 20)
+    }
+
+    localStorage.setItem('interview-history', JSON.stringify(history))
+  } catch {
+    // ignore
+  }
 }
 
 function generateLocalReport() {
