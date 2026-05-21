@@ -1,11 +1,20 @@
 <script setup lang="ts">
 import { ref, reactive, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Plus, Delete, Edit, UploadFilled, Check } from '@element-plus/icons-vue'
+import { Plus, Delete, Edit, UploadFilled, Check, MagicStick } from '@element-plus/icons-vue'
 import { useResumeStore } from '@/stores/modules/resume'
+import { polishResumeProjectApi } from '@/api/modules/ai'
 import type { ResumeInfo, ResumeProject, ResumeExperience } from '@/types/resume'
 
 const resumeStore = useResumeStore()
+
+const optimizingProjectId = ref<string>('')
+const optimizationResult = ref<{
+  optimized: ResumeProject
+  suggestions: string[]
+} | null>(null)
+const showOptimizeDialog = ref(false)
+const copiedOptimized = ref(false)
 
 const rawText = ref('')
 const uploading = ref(false)
@@ -239,6 +248,55 @@ function deleteProject(id: string) {
   }).catch(() => {})
 }
 
+async function handleOptimizeProject(project: ResumeProject) {
+  optimizingProjectId.value = project.id
+  try {
+    const result = await polishResumeProjectApi(project)
+    optimizationResult.value = result
+    showOptimizeDialog.value = true
+  } catch {
+    ElMessage.error('优化失败，请重试')
+  } finally {
+    optimizingProjectId.value = ''
+  }
+}
+
+function applyOptimizedProject() {
+  if (!optimizationResult.value) return
+  const opt = optimizationResult.value.optimized
+  const index = form.projects.findIndex((p) => p.id === opt.id)
+  if (index !== -1) {
+    form.projects[index] = {
+      ...form.projects[index],
+      description: opt.description,
+      highlights: opt.highlights,
+      difficulties: opt.difficulties,
+    }
+    ElMessage.success('已将优化结果应用到简历')
+  }
+  showOptimizeDialog.value = false
+}
+
+function copyOptimized() {
+  if (!optimizationResult.value) return
+  const opt = optimizationResult.value.optimized
+  const text = [
+    `项目名称：${opt.name}`,
+    `担任角色：${opt.role}`,
+    `项目描述：${opt.description}`,
+    `技术亮点：${opt.highlights.join('；')}`,
+    `技术难点：${opt.difficulties}`,
+    `项目成果：${opt.result}`,
+  ].join('\n\n')
+  navigator.clipboard.writeText(text).then(() => {
+    copiedOptimized.value = true
+    ElMessage.success('已复制优化结果')
+    setTimeout(() => { copiedOptimized.value = false }, 2000)
+  }).catch(() => {
+    ElMessage.error('复制失败')
+  })
+}
+
 // Experience CRUD
 function resetExperienceForm() {
   experienceForm.id = ''
@@ -432,6 +490,15 @@ function deleteExperience(id: string) {
                     <el-button size="small" :icon="Edit" @click.stop="openEditProject(project)">
                       编辑
                     </el-button>
+                    <el-button
+                      size="small"
+                      :icon="MagicStick"
+                      type="warning"
+                      :loading="optimizingProjectId === project.id"
+                      @click.stop="handleOptimizeProject(project)"
+                    >
+                      优化描述
+                    </el-button>
                     <el-button size="small" :icon="Delete" type="danger" @click.stop="deleteProject(project.id)">
                       删除
                     </el-button>
@@ -543,6 +610,74 @@ function deleteExperience(id: string) {
       <template #footer>
         <el-button @click="experienceDialogVisible = false">取消</el-button>
         <el-button type="primary" @click="saveExperience">保存</el-button>
+      </template>
+    </el-dialog>
+
+    <!-- Project Optimize Dialog -->
+    <el-dialog
+      v-model="showOptimizeDialog"
+      title="项目描述优化"
+      width="750px"
+      destroy-on-close
+    >
+      <template v-if="optimizationResult">
+        <el-row :gutter="16">
+          <el-col :span="12">
+            <div class="compare-panel">
+              <div class="compare-panel-title before">优化前</div>
+              <div class="compare-field">
+                <div class="field-label">项目描述</div>
+                <p>{{ optimizationResult.optimized.name }} - {{ optimizationResult.optimized.description }}</p>
+              </div>
+              <div class="compare-field">
+                <div class="field-label">技术亮点</div>
+                <ul>
+                  <li v-for="h in (optimizationResult.optimized.highlights || [])" :key="h">{{ h }}</li>
+                </ul>
+              </div>
+              <div class="compare-field">
+                <div class="field-label">技术难点</div>
+                <p>{{ optimizationResult.optimized.difficulties || '（无）' }}</p>
+              </div>
+            </div>
+          </el-col>
+          <el-col :span="12">
+            <div class="compare-panel">
+              <div class="compare-panel-title after">优化后</div>
+              <div class="compare-field">
+                <div class="field-label">项目描述</div>
+                <p>{{ optimizationResult.optimized.description }}</p>
+              </div>
+              <div class="compare-field">
+                <div class="field-label">技术亮点</div>
+                <ul>
+                  <li v-for="h in optimizationResult.optimized.highlights" :key="h">{{ h }}</li>
+                </ul>
+              </div>
+              <div class="compare-field">
+                <div class="field-label">技术难点</div>
+                <p>{{ optimizationResult.optimized.difficulties }}</p>
+              </div>
+            </div>
+          </el-col>
+        </el-row>
+
+        <div v-if="optimizationResult.suggestions.length" class="optimize-suggestions">
+          <div class="suggestions-title">优化建议：</div>
+          <ul>
+            <li v-for="s in optimizationResult.suggestions" :key="s">{{ s }}</li>
+          </ul>
+        </div>
+      </template>
+
+      <template #footer>
+        <el-button @click="showOptimizeDialog = false">取消</el-button>
+        <el-button @click="copyOptimized" :type="copiedOptimized ? 'success' : 'default'">
+          {{ copiedOptimized ? '已复制' : '复制优化结果' }}
+        </el-button>
+        <el-button type="primary" @click="applyOptimizedProject">
+          一键替换到简历
+        </el-button>
       </template>
     </el-dialog>
   </div>
@@ -684,5 +819,91 @@ function deleteExperience(id: string) {
   color: #606266;
   font-size: 14px;
   margin: 0;
+}
+
+/* Optimize Dialog */
+.compare-panel {
+  padding: 12px;
+  border-radius: 8px;
+  border: 1px solid #e4e7ed;
+  background: #fafafa;
+  min-height: 200px;
+}
+
+.compare-panel-title {
+  font-size: 13px;
+  font-weight: 600;
+  margin-bottom: 10px;
+  padding: 2px 10px;
+  border-radius: 4px;
+  display: inline-block;
+}
+
+.compare-panel-title.before {
+  background: #fef0f0;
+  color: #f56c6c;
+  border: 1px solid #fbc4c4;
+}
+
+.compare-panel-title.after {
+  background: #f0f9eb;
+  color: #67c23a;
+  border: 1px solid #c2e7b0;
+}
+
+.compare-field {
+  margin-bottom: 12px;
+}
+
+.compare-field .field-label {
+  font-size: 12px;
+  font-weight: 600;
+  color: #909399;
+  margin-bottom: 4px;
+  text-transform: uppercase;
+}
+
+.compare-field p {
+  margin: 0;
+  font-size: 13px;
+  color: #606266;
+  line-height: 1.7;
+}
+
+.compare-field ul {
+  margin: 0;
+  padding-left: 16px;
+}
+
+.compare-field li {
+  font-size: 13px;
+  color: #606266;
+  line-height: 1.7;
+}
+
+.optimize-suggestions {
+  margin-top: 16px;
+  padding: 12px 16px;
+  background: #fdf6ec;
+  border-radius: 8px;
+  border: 1px solid #faecd8;
+}
+
+.suggestions-title {
+  font-weight: 600;
+  color: #e6a23c;
+  margin-bottom: 6px;
+  font-size: 13px;
+}
+
+.optimize-suggestions ul {
+  margin: 0;
+  padding-left: 18px;
+}
+
+.optimize-suggestions li {
+  color: #606266;
+  line-height: 1.8;
+  font-size: 13px;
 }
 </style>
