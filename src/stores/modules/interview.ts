@@ -1,9 +1,11 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import type { InterviewConfig, InterviewQuestion, ChatMessage, AnswerEvaluation, InterviewSession } from '@/types/interview'
+import type { ResumeInfo } from '@/types/resume'
 
 export const useInterviewStore = defineStore('interview', () => {
   const config = ref<InterviewConfig | null>(null)
+  const resumeSnapshot = ref<ResumeInfo | null>(null)
   const questions = ref<InterviewQuestion[]>([])
   const messages = ref<ChatMessage[]>([])
   const evaluations = ref<AnswerEvaluation[]>([])
@@ -26,9 +28,23 @@ export const useInterviewStore = defineStore('interview', () => {
 
   const hasSession = computed(() => status.value !== 'idle')
 
+  const answeredCount = computed(() => evaluations.value.length)
+
   function setConfig(c: InterviewConfig) {
     config.value = c
     status.value = 'configuring'
+    saveToStorage()
+  }
+
+  function updateConfig(fields: Partial<InterviewConfig>) {
+    if (config.value) {
+      Object.assign(config.value, fields)
+      saveToStorage()
+    }
+  }
+
+  function setResumeSnapshot(info: ResumeInfo) {
+    resumeSnapshot.value = info
   }
 
   function setQuestions(qs: InterviewQuestion[]) {
@@ -47,9 +63,26 @@ export const useInterviewStore = defineStore('interview', () => {
     saveToStorage()
   }
 
+  function updateMessage(id: string, content: string, msgStatus?: ChatMessage['status']) {
+    const msg = messages.value.find((m) => m.id === id)
+    if (msg) {
+      msg.content = content
+      if (msgStatus) msg.status = msgStatus
+      saveToStorage()
+    }
+  }
+
   function addEvaluation(eval_: AnswerEvaluation) {
     evaluations.value.push(eval_)
     saveToStorage()
+  }
+
+  function updateEvaluation(questionId: string, fields: Partial<AnswerEvaluation>) {
+    const evaluation = evaluations.value.find((e) => e.questionId === questionId)
+    if (evaluation) {
+      Object.assign(evaluation, fields)
+      saveToStorage()
+    }
   }
 
   function nextQuestion() {
@@ -67,6 +100,7 @@ export const useInterviewStore = defineStore('interview', () => {
 
   function resetSession() {
     config.value = null
+    resumeSnapshot.value = null
     questions.value = []
     messages.value = []
     evaluations.value = []
@@ -82,6 +116,7 @@ export const useInterviewStore = defineStore('interview', () => {
     const session: InterviewSession = {
       id: sessionId.value,
       config: config.value!,
+      resumeSnapshot: resumeSnapshot.value || undefined,
       questions: questions.value,
       messages: messages.value,
       evaluations: evaluations.value,
@@ -99,6 +134,7 @@ export const useInterviewStore = defineStore('interview', () => {
       try {
         const session: InterviewSession = JSON.parse(stored)
         config.value = session.config
+        resumeSnapshot.value = session.resumeSnapshot || null
         questions.value = session.questions
         messages.value = session.messages
         evaluations.value = session.evaluations
@@ -115,6 +151,7 @@ export const useInterviewStore = defineStore('interview', () => {
 
   return {
     config,
+    resumeSnapshot,
     questions,
     messages,
     evaluations,
@@ -126,10 +163,15 @@ export const useInterviewStore = defineStore('interview', () => {
     currentQuestion,
     isLastQuestion,
     hasSession,
+    answeredCount,
     setConfig,
+    updateConfig,
+    setResumeSnapshot,
     setQuestions,
     addMessage,
+    updateMessage,
     addEvaluation,
+    updateEvaluation,
     nextQuestion,
     finishInterview,
     resetSession,

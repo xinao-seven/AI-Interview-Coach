@@ -43,6 +43,7 @@ export interface AnswerEvaluation {
 export interface InterviewSession {
   id: string
   config: InterviewConfig
+  resumeSnapshot?: import('@/types/resume').ResumeInfo
   questions: InterviewQuestion[]
   messages: ChatMessage[]
   evaluations: AnswerEvaluation[]

@@ -1,13 +1,33 @@
 import { defineStore } from 'pinia'
-import { ref } from 'vue'
+import { ref, computed } from 'vue'
 import type { InterviewReport } from '@/types/report'
 
 export const useReportStore = defineStore('report', () => {
   const report = ref<InterviewReport | null>(null)
 
+  const hasReport = computed(() => report.value !== null)
+
   function setReport(r: InterviewReport) {
     report.value = r
-    localStorage.setItem('report', JSON.stringify(r))
+    saveToStorage()
+  }
+
+  function updateReport(fields: Partial<InterviewReport>) {
+    if (report.value) {
+      Object.assign(report.value, fields)
+      saveToStorage()
+    }
+  }
+
+  function clearReport() {
+    report.value = null
+    localStorage.removeItem('report')
+  }
+
+  function saveToStorage() {
+    if (report.value) {
+      localStorage.setItem('report', JSON.stringify(report.value))
+    }
   }
 
   function loadFromStorage() {
@@ -21,15 +41,12 @@ export const useReportStore = defineStore('report', () => {
     }
   }
 
-  function clearReport() {
-    report.value = null
-    localStorage.removeItem('report')
-  }
-
   return {
     report,
+    hasReport,
     setReport,
-    loadFromStorage,
+    updateReport,
     clearReport,
+    loadFromStorage,
   }
 })
