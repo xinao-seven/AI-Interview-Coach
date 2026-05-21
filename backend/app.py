@@ -13,8 +13,14 @@ from routes import register_routes
 def create_app() -> Flask:
     app = Flask(__name__)
 
-    # CORS for frontend dev server
-    CORS(app, origins=Config.CORS_ORIGINS, supports_credentials=True)
+    CORS(app, resources={
+        r"/api/*": {
+            "origins": Config.CORS_ORIGINS.split(",") if Config.CORS_ORIGINS != "*" else "*",
+            "methods": ["GET", "POST", "OPTIONS"],
+            "allow_headers": ["Content-Type", "Authorization"],
+            "supports_credentials": False,
+        }
+    })
 
     # Register API blueprints
     register_routes(app)
