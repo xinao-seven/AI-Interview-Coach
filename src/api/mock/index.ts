@@ -193,6 +193,14 @@ export async function mockEvaluateAnswer(
 
   const totalScore = Math.min(98, baseScore)
 
+  const thinking = totalScore > 70
+    ? `分析本题回答质量：\n\n- 回答长度 ${len} 字，信息量充足\n- 核心概念表述清晰，逻辑结构合理\n- 建议补充实际项目案例以提升项目结合度得分\n- 整体表现良好，可进一步深挖技术细节`
+    : totalScore > 50
+      ? `分析本题回答质量：\n\n- 回答长度 ${len} 字，内容基本覆盖\n- 部分概念表述不够精确\n- 缺少实际案例支撑，项目结合度偏低\n- 建议围绕标签知识点进行系统性复习`
+      : totalScore > 0
+        ? `分析本题回答质量：\n\n- 回答长度 ${len} 字，内容较简短\n- 核心知识点覆盖不足\n- 建议重点复习相关技术文档和面试高频题`
+        : `分析：候选人表示不会本题，跳过评分。`
+
   return {
     questionId: _question.id,
     totalScore,
@@ -215,6 +223,7 @@ export async function mockEvaluateAnswer(
     followUpQuestion: totalScore > 60
       ? '能否再展开说说在实际项目中你是如何应用这一知识点的？'
       : '',
+    thinking,
   }
 }
 

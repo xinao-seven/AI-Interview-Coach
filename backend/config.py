@@ -22,3 +22,8 @@ class Config:
     # 请求限制（简单实现）
     MAX_REQUEST_TOKENS = int(os.getenv("MAX_REQUEST_TOKENS", 4096))
     TEMPERATURE = float(os.getenv("AI_TEMPERATURE", 0.7))
+
+    # 思考模式（DeepSeek 等推理模型）
+    # true  → 启用思考模式，AI 会输出推理过程（<thinking> 块或 reasoning_content 字段）
+    # false → 禁用思考模式，仅输出纯净 JSON（兼容旧版）
+    AI_ENABLE_THINKING = os.getenv("AI_ENABLE_THINKING", "true").lower() == "true"

@@ -48,7 +48,12 @@ export async function evaluateAnswerApi(
     resumeInfo,
     followUpContext: followUpContext || null,
   })
-  return (res.evaluation || res) as AnswerEvaluation
+  const evaluation = (res.evaluation || res) as AnswerEvaluation
+  // 附加后端返回的思考过程
+  if (res.thinking) {
+    evaluation.thinking = res.thinking
+  }
+  return evaluation
 }
 
 // 4. 生成面试报告

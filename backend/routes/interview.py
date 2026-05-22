@@ -118,7 +118,9 @@ def evaluate_answer():
             system_prompt=ANSWER_EVALUATION_SYSTEM,
             user_message=user_message,
         )
-        return jsonify({"evaluation": evaluation})
+        # 提取并传递 thinking 字段
+        thinking = evaluation.pop("_thinking", "")
+        return jsonify({"evaluation": evaluation, "thinking": thinking})
     except ValueError as e:
         return jsonify({"error": "AI response parse failed", "detail": str(e)}), 502
     except Exception as e:
@@ -147,7 +149,8 @@ def generate_report():
                 f"请生成面试评估报告。"
             ),
         )
-        return jsonify({"report": report})
+        thinking = report.pop("_thinking", "")
+        return jsonify({"report": report, "thinking": thinking})
     except ValueError as e:
         return jsonify({"error": "AI response parse failed", "detail": str(e)}), 502
     except Exception as e:

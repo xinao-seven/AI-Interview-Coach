@@ -5,9 +5,11 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import { useInterviewStore } from '@/stores/modules/interview'
 import { useReportStore } from '@/stores/modules/report'
 import { useResumeStore } from '@/stores/modules/resume'
+import { useHistoryStore } from '@/stores/modules/history'
 import { evaluateAnswerApi, generateReportApi } from '@/api/modules/ai'
 import { simulateStream } from '@/utils/sse'
 import MarkdownRenderer from '@/components/MarkdownRenderer.vue'
+import VirtualChatList from '@/components/VirtualChatList.vue'
 import type { ChatMessage, AnswerEvaluation } from '@/types/interview'
 import type { InterviewReport } from '@/types/report'
 
@@ -15,6 +17,7 @@ const router = useRouter()
 const interviewStore = useInterviewStore()
 const reportStore = useReportStore()
 const resumeStore = useResumeStore()
+const historyStore = useHistoryStore()
 
 const answerText = ref('')
 const evaluating = ref(false)
@@ -22,7 +25,7 @@ const streaming = ref(false)
 const streamingText = ref('')
 const showingHint = ref(false)
 const hintText = ref('')
-const chatContainer = ref<HTMLElement | null>(null)
+const virtualListRef = ref<InstanceType<typeof VirtualChatList> | null>(null)
 const submitting = ref(false)
 let stopStreamFn: (() => void) | null = null
 
@@ -43,6 +46,7 @@ const canSubmit = computed(() => {
 
 onMounted(() => {
     interviewStore.loadFromStorage()
+    historyStore.loadFromStorage()
 
     if (!interviewStore.hasSession || interviewStore.questions.length === 0) {
         ElMessage.warning('请先配置面试参数')
@@ -57,8 +61,6 @@ onMounted(() => {
 
     if (interviewStore.messages.length === 0 && currentQuestion.value) {
         showCurrentQuestion()
-    } else {
-        nextTick(() => scrollToBottom())
     }
 })
 
@@ -88,11 +90,7 @@ onUnmounted(() => {
 })
 
 function scrollToBottom() {
-    nextTick(() => {
-        if (chatContainer.value) {
-            chatContainer.value.scrollTop = chatContainer.value.scrollHeight
-        }
-    })
+    virtualListRef.value?.scrollToBottom()
 }
 
 async function showCurrentQuestion() {
@@ -111,11 +109,14 @@ async function showCurrentQuestion() {
     interviewStore.addMessage(msg)
     scrollToBottom()
 
-    // Stream the question text
+    // Stream the question text with a thinking phase first
     streaming.value = true
     streamingText.value = ''
 
     const fullText = currentQuestion.value.question
+
+    // 模拟面试官的思考过程
+    const reasoning = generateQuestionReasoning(currentQuestion.value)
 
     stopStreamFn = simulateStream(fullText, {
         onMessage: (chunk) => {
@@ -136,6 +137,9 @@ async function showCurrentQuestion() {
             streamingText.value = ''
             stopStreamFn = null
         },
+    }, {
+        reasoningText: reasoning,
+        reasoningSpeed: 2.0,
     })
 }
 
@@ -438,7 +442,12 @@ function formatEvaluation(evaluation: AnswerEvaluation, isFollowUp = false): str
 
     const title = isFollowUp ? '## 📊 追问评分' : '## 📊 当前回答评分'
 
-    return `${title}
+    // 构建思考过程块（来自 AI 的 reasoning）
+    const thinkingBlock = evaluation.thinking
+        ? `<thinking>\n${evaluation.thinking}\n</thinking>\n\n`
+        : ''
+
+    return `${thinkingBlock}${title}
 
 | 维度 | 得分 |
 |------|------|
@@ -484,6 +493,25 @@ function generateHint(question: NonNullable<typeof currentQuestion.value>): stri
     return '💡 提示：先给出核心结论，再展开论述；多用具体例子，避免空泛表达。'
 }
 
+/**
+ * 生成题目的模拟推理过程（Mock 模式下展示思考折叠效果）
+ */
+function generateQuestionReasoning(question: NonNullable<typeof currentQuestion.value>): string {
+    if (!question) return ''
+    const tagStr = question.tags.join('、')
+    const lines = [
+        `分析本题考察方向：${tagStr}`,
+        `难度级别：${question.difficulty === 'hard' ? '困难' : question.difficulty === 'easy' ? '基础' : '中等'}`,
+        `题型：${question.type === 'project-deep' ? '项目深挖，需结合简历项目经验' : '技术基础，考察核心概念理解'}`,
+    ]
+    if (question.type === 'project-deep') {
+        lines.push('准备从候选人的项目经历出发，追问技术选型和架构设计细节')
+    } else {
+        lines.push('准备考察候选人对此概念的理解深度和实际应用经验')
+    }
+    return lines.join('\n\n')
+}
+
 function getCurrentEvaluation() {
     const q = currentQuestion.value
     if (!q) return null
@@ -491,34 +519,20 @@ function getCurrentEvaluation() {
 }
 
 function saveInterviewHistory(report: InterviewReport | null) {
-    try {
-        const stored = localStorage.getItem('interview-history')
-        const history: Array<{
-            sessionId: string
-            totalScore: number
-            role: string
-            mode: string
-            questionCount: number
-            finishedAt: string
-        }> = stored ? JSON.parse(stored) : []
-
-        history.push({
-            sessionId: interviewStore.sessionId,
-            totalScore: report?.totalScore || 0,
-            role: interviewStore.config?.targetRole || '未知',
-            mode: interviewStore.config?.interviewMode || '',
-            questionCount: interviewStore.questions.length,
-            finishedAt: new Date().toISOString(),
-        })
-
-        if (history.length > 20) {
-            history.splice(0, history.length - 20)
-        }
-
-        localStorage.setItem('interview-history', JSON.stringify(history))
-    } catch {
-        // ignore
+    // 统一通过 historyStore 保存，支持完整回看
+    const session = {
+        id: interviewStore.sessionId,
+        config: interviewStore.config!,
+        resumeSnapshot: interviewStore.resumeSnapshot || undefined,
+        questions: interviewStore.questions,
+        messages: interviewStore.messages,
+        evaluations: interviewStore.evaluations,
+        currentQuestionIndex: interviewStore.currentQuestionIndex,
+        status: 'finished' as const,
+        createdAt: interviewStore.createdAt,
+        finishedAt: interviewStore.finishedAt || new Date().toISOString(),
     }
+    historyStore.addHistory(session, report?.totalScore || 0)
 }
 
 function generateLocalReport() {
@@ -656,33 +670,43 @@ const modeLabel = computed(() => {
                 </el-card>
             </div>
 
-            <!-- Center: Chat Area -->
+            <!-- Center: Chat Area with Virtual List -->
             <div class="interview-center">
-                <div class="chat-area" ref="chatContainer">
-                    <div v-for="msg in interviewStore.messages" :key="msg.id" class="chat-message"
-                        :class="`msg-${msg.role}`">
-                        <div class="msg-avatar">
-                            <span v-if="msg.role === 'interviewer'">🤖</span>
-                            <span v-else-if="msg.role === 'user'">👤</span>
-                            <span v-else>📋</span>
-                        </div>
-                        <div class="msg-bubble" :class="`bubble-${msg.role}`">
-                            <div class="msg-content">
-                                <MarkdownRenderer v-if="msg.content" :content="msg.content" variant="chat" />
-                                <span v-if="msg.status === 'streaming'" class="streaming-cursor">▍</span>
+                <VirtualChatList
+                    ref="virtualListRef"
+                    :items="interviewStore.messages"
+                    :estimated-item-height="80"
+                    :stick-to-bottom="true"
+                    class="chat-area"
+                >
+                    <template #default="{ item: msg }">
+                        <div class="chat-message" :class="`msg-${(msg as ChatMessage).role}`">
+                            <div class="msg-avatar">
+                                <span v-if="(msg as ChatMessage).role === 'interviewer'">🤖</span>
+                                <span v-else-if="(msg as ChatMessage).role === 'user'">👤</span>
+                                <span v-else>📋</span>
+                            </div>
+                            <div class="msg-bubble" :class="`bubble-${(msg as ChatMessage).role}`">
+                                <div class="msg-content">
+                                    <MarkdownRenderer
+                                        v-if="(msg as ChatMessage).content"
+                                        :content="(msg as ChatMessage).content"
+                                        variant="chat"
+                                        :enable-thinking-fold="true"
+                                    />
+                                    <span v-if="(msg as ChatMessage).status === 'streaming'" class="streaming-cursor">▍</span>
+                                </div>
                             </div>
                         </div>
-                    </div>
+                    </template>
+                </VirtualChatList>
 
-                    <div v-if="evaluating && !streaming" class="chat-message msg-system">
-                        <div class="msg-avatar"><span>📋</span></div>
-                        <div class="msg-bubble bubble-system">
-                            <div class="evaluating-dots">
-                                <span></span><span></span><span></span>
-                            </div>
-                            正在评分...
-                        </div>
+                <!-- 评分等待提示（叠加在列表底部） -->
+                <div v-if="evaluating && !streaming" class="evaluating-overlay">
+                    <div class="evaluating-dots">
+                        <span></span><span></span><span></span>
                     </div>
+                    正在评分...
                 </div>
 
                 <!-- Stop Streaming Button -->
@@ -952,23 +976,42 @@ const modeLabel = computed(() => {
     display: flex;
     flex-direction: column;
     min-width: 0;
+    position: relative;
 }
 
 .chat-area {
     flex: 1;
-    overflow-y: auto;
-    padding: 16px;
     background: #fff;
     border-radius: 8px;
     border: 1px solid #e4e7ed;
     margin-bottom: 12px;
+    min-height: 0;
+    /* VirtualChatList 接管滚动和 padding */
+}
+
+/* 评分等待叠加层 */
+.evaluating-overlay {
+    position: absolute;
+    bottom: 120px;
+    left: 50%;
+    transform: translateX(-50%);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    background: #fff;
+    padding: 10px 18px;
+    border-radius: 20px;
+    box-shadow: 0 2px 8px rgba(0,0,0,.08);
+    font-size: 13px;
+    color: #909399;
+    z-index: 5;
 }
 
 .chat-message {
     display: flex;
     gap: 10px;
-    margin-bottom: 16px;
     align-items: flex-start;
+    padding: 6px 16px;
 }
 
 .msg-avatar {

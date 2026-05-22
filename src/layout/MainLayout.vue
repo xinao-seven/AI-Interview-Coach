@@ -4,7 +4,7 @@ import { useRouter, useRoute } from 'vue-router'
 import {
   HomeFilled, Document, Setting, Edit, ChatDotRound,
   Notebook, DataAnalysis, Collection, Tools,
-  Fold, Expand,
+  Fold, Expand, Clock,
 } from '@element-plus/icons-vue'
 
 const router = useRouter()
@@ -22,6 +22,7 @@ const menuItems = [
   { path: '/interview-report', title: '面试报告', icon: DataAnalysis },
   { path: '/mistake-book', title: '错题本', icon: Collection },
   { path: '/settings', title: '设置', icon: Tools },
+  { path: '/interview-history', title: '面试历史', icon: Clock },
 ]
 
 const activeMenu = computed(() => route.path)
