@@ -1,6 +1,6 @@
 import request from '@/api'
 import type { ResumeInfo, ResumeProject } from '@/types/resume'
-import type { InterviewConfig, InterviewQuestion, AnswerEvaluation, InterviewSession, ChatMessage } from '@/types/interview'
+import type { InterviewConfig, InterviewQuestion, AnswerEvaluation, InterviewSession } from '@/types/interview'
 import type { InterviewReport } from '@/types/report'
 import {
   mockParseResume,
@@ -13,116 +13,67 @@ import {
 
 const isMock = import.meta.env.VITE_AI_MODE !== 'real'
 
-// Utility: stream request for SSE
-export function createStreamRequest(
-  url: string,
-  body: Record<string, unknown>,
-  callbacks: {
-    onMessage: (text: string) => void
-    onError?: (error: Error) => void
-    onDone?: () => void
-  }
-): AbortController {
-  const controller = new AbortController()
-
-  fetch(url, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(body),
-    signal: controller.signal,
-  })
-    .then(async (response) => {
-      if (!response.ok) throw new Error(`HTTP ${response.status}`)
-      const reader = response.body?.getReader()
-      if (!reader) throw new Error('No response body')
-
-      const decoder = new TextDecoder()
-      let buffer = ''
-
-      while (true) {
-        const { done, value } = await reader.read()
-        if (done) break
-
-        buffer += decoder.decode(value, { stream: true })
-        const lines = buffer.split('\n')
-        buffer = lines.pop() || ''
-
-        for (const line of lines) {
-          if (line.startsWith('data: ')) {
-            const data = line.slice(6)
-            if (data === '[DONE]') {
-              callbacks.onDone?.()
-              return
-            }
-            try {
-              const parsed = JSON.parse(data)
-              callbacks.onMessage(parsed.content || parsed.text || '')
-            } catch {
-              callbacks.onMessage(data)
-            }
-          }
-        }
-      }
-      callbacks.onDone?.()
-    })
-    .catch((err) => {
-      if (err.name !== 'AbortError') {
-        callbacks.onError?.(err)
-      }
-    })
-
-  return controller
-}
-
-// 1. Parse resume
+// 1. 解析简历
 export async function parseResumeApi(rawText: string): Promise<ResumeInfo> {
   if (isMock) return mockParseResume(rawText)
-  return request.post('/resume/parse', { rawText }) as Promise<ResumeInfo>
+  const res: any = await request.post('/resume/parse', { rawText })
+  return (res.resumeInfo || res) as ResumeInfo
 }
 
-// 2. Generate questions
+// 2. 生成面试题目
 export async function generateQuestionsApi(
   resumeInfo: ResumeInfo | null,
   config: InterviewConfig
 ): Promise<InterviewQuestion[]> {
   if (isMock) return mockGenerateQuestions(resumeInfo, config)
-  return request.post('/interview/questions', { resumeInfo, config }) as Promise<InterviewQuestion[]>
+  const res: any = await request.post('/interview/questions', { resumeInfo, config })
+  return (res.questions || res) as InterviewQuestion[]
 }
 
-// 3. Evaluate answer
+// 3. 评估回答
 export async function evaluateAnswerApi(
   question: InterviewQuestion,
   userAnswer: string,
-  resumeInfo: ResumeInfo | null
+  resumeInfo: ResumeInfo | null,
+  followUpContext?: {
+    isFollowUp: boolean
+    followUpQuestion: string
+    mainAnswer: string
+  }
 ): Promise<AnswerEvaluation> {
   if (isMock) return mockEvaluateAnswer(question, userAnswer, resumeInfo)
-  return request.post('/interview/evaluate', {
+  const res: any = await request.post('/interview/evaluate', {
     question,
     userAnswer,
     resumeInfo,
-  }) as Promise<AnswerEvaluation>
+    followUpContext: followUpContext || null,
+  })
+  return (res.evaluation || res) as AnswerEvaluation
 }
 
-// 4. Generate report
+// 4. 生成面试报告
 export async function generateReportApi(session: InterviewSession): Promise<InterviewReport> {
   if (isMock) return mockGenerateReport(session)
-  return request.post('/interview/report', { session }) as Promise<InterviewReport>
+  const res: any = await request.post('/interview/report', { session })
+  return (res.report || res) as InterviewReport
 }
 
-// 5. Polish project
+// 5. 润色项目描述
 export async function polishResumeProjectApi(project: ResumeProject): Promise<{
   optimized: ResumeProject
   suggestions: string[]
 }> {
   if (isMock) return mockPolishProject(project)
-  return request.post('/project/polish', { project }) as Promise<{
-    optimized: ResumeProject
-    suggestions: string[]
-  }>
+  const res: any = await request.post('/project/polish', { project })
+  return {
+    optimized: res.optimizedProject || res.optimized || res,
+    suggestions: res.suggestions || [],
+  }
 }
 
-// 6. Generate project questions
+// 6. 生成项目深挖问题
 export async function generateProjectQuestionsApi(project: ResumeProject): Promise<InterviewQuestion[]> {
   if (isMock) return mockGenerateProjectQuestions(project)
-  return request.post('/project/questions', { project }) as Promise<InterviewQuestion[]>
+  const res: any = await request.post('/project/questions', { project })
+  return (res.questions || res) as InterviewQuestion[]
 }

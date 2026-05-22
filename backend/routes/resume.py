@@ -1,4 +1,4 @@
-"""POST /api/resume/parse — AI-powered resume parsing."""
+"""POST /api/resume/parse — AI 驱动的简历解析接口"""
 
 from flask import Blueprint, request, jsonify
 from services.ai_service import chat_completion_json
@@ -10,8 +10,10 @@ resume_bp = Blueprint("resume", __name__)
 @resume_bp.route("/parse", methods=["POST"])
 def parse_resume():
     """
-    Request:  { "rawText": "..." }
-    Response: { "resumeInfo": {...} }
+    解析简历文本为结构化数据
+
+    请求格式：{ "rawText": "..." }
+    响应格式：{ "resumeInfo": {...} }
     """
     data = request.get_json(silent=True) or {}
     raw_text = data.get("rawText", "").strip()

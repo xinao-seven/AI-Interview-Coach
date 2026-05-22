@@ -34,7 +34,7 @@ html, body {
   height: 100%;
 }
 
-/* Scrollbar */
+/* 滚动条样式 */
 ::-webkit-scrollbar {
   width: 6px;
   height: 6px;
@@ -53,7 +53,7 @@ html, body {
   background: transparent;
 }
 
-/* Page fade transition */
+/* 页面淡入淡出过渡动画 */
 .page-fade-enter-active,
 .page-fade-leave-active {
   transition: opacity 0.2s ease;
@@ -64,7 +64,7 @@ html, body {
   opacity: 0;
 }
 
-/* Element Plus overrides */
+/* Element Plus 全局样式覆盖 */
 .el-card {
   border-radius: var(--card-radius) !important;
   box-shadow: var(--shadow-sm) !important;

@@ -1,0 +1,8 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npm install *)",
+      "Bash(node -e \"const p = require\\('element-plus'\\); console.log\\(Object.keys\\(p\\).filter\\(k => k.toLowerCase\\(\\).includes\\('locale'\\) || k.toLowerCase\\(\\).includes\\('lang'\\)\\).join\\('\\\\n'\\)\\)\")"
+    ]
+  }
+}

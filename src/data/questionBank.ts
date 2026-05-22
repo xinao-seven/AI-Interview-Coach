@@ -30,7 +30,7 @@ export const categories: BankCategory[] = [
 ]
 
 export const questionBank: BankQuestion[] = [
-  // HTML/CSS
+  // ==================== HTML/CSS ====================
   {
     id: 'html-1',
     category: 'html-css',
@@ -56,7 +56,7 @@ export const questionBank: BankQuestion[] = [
     referenceAnswer: 'BFC 是独立的渲染区域，内部元素不会影响外部。触发条件：float非none、overflow非visible、display:flex/grid、position:absolute/fixed。应用：清除浮动、防止margin重叠、自适应两栏布局。',
   },
 
-  // JavaScript
+  // ==================== JavaScript ====================
   {
     id: 'js-1',
     category: 'javascript',
@@ -82,7 +82,7 @@ export const questionBank: BankQuestion[] = [
     referenceAnswer: 'Promise.all：全部成功才成功，一个失败就失败。Promise.race：第一个完成的结果（无论成功失败）。Promise.allSettled：全部完成后返回所有结果（包含成功和失败）。Promise.any：第一个成功的，全部失败才失败。',
   },
 
-  // TypeScript
+  // ==================== TypeScript ====================
   {
     id: 'ts-1',
     category: 'typescript',
@@ -100,7 +100,7 @@ export const questionBank: BankQuestion[] = [
     referenceAnswer: '泛型允许在定义时不指定具体类型，使用时再确定。场景：通用工具函数(如 Array.map)、泛型约束(extends)、条件类型(infer)。例如：function identity<T>(arg: T): T { return arg; }',
   },
 
-  // Vue3
+  // ==================== Vue3 ====================
   {
     id: 'vue-1',
     category: 'vue3',
@@ -126,7 +126,7 @@ export const questionBank: BankQuestion[] = [
     referenceAnswer: 'ref 适用于基本类型和对象，.value 访问，模板自动解包。reactive 仅适用于对象类型，直接访问属性。建议：基本类型用 ref，对象推荐 ref（配合 toRefs 解构），需要响应式集合用 reactive。',
   },
 
-  // HTTP/浏览器
+  // ==================== HTTP/浏览器 ====================
   {
     id: 'http-1',
     category: 'http',
@@ -144,7 +144,7 @@ export const questionBank: BankQuestion[] = [
     referenceAnswer: '强缓存：不向服务器发请求，直接使用本地缓存。Header：Expires(HTTP/1.0) / Cache-Control: max-age(HTTP/1.1)。协商缓存：向服务器验证是否过期，304 使用缓存。Header：Last-Modified/If-Modified-Since 和 ETag/If-None-Match。',
   },
 
-  // 性能优化
+  // ==================== 性能优化 ====================
   {
     id: 'perf-1',
     category: 'performance',
@@ -154,7 +154,7 @@ export const questionBank: BankQuestion[] = [
     referenceAnswer: '网络层面：CDN、压缩、HTTP2、资源预加载。构建层面：Tree Shaking、代码分割、懒加载。渲染层面：虚拟列表、防抖节流、requestAnimationFrame、Web Worker。缓存：Service Worker、localStorage、IndexedDB。监控：Performance API、Lighthouse。',
   },
 
-  // Engineering
+  // ==================== 前端工程化 ====================
   {
     id: 'eng-1',
     category: 'engineering',
@@ -164,7 +164,7 @@ export const questionBank: BankQuestion[] = [
     referenceAnswer: 'Webpack：基于 bundle 的构建方式，插件生态丰富，适合大型复杂项目。Vite：基于 ESM 的开发服务器，开发时使用 esbuild 预构建，生产使用 Rollup。优势：冷启动快、HMR 快。适用：新项目推荐 Vite，老项目或特殊需求使用 Webpack。',
   },
 
-  // WebGIS
+  // ==================== WebGIS ====================
   {
     id: 'gis-1',
     category: 'webgis',
@@ -182,7 +182,7 @@ export const questionBank: BankQuestion[] = [
     referenceAnswer: '1. 使用 WebGL 渲染器替代 Canvas 渲染器。2. 矢量切片（Vector Tiles）减少数据传输和渲染压力。3. 图层按需加载，根据缩放级别控制显示。4. 使用空间索引（R-tree）加速查询。5. 简化几何数据，减少顶点数。6. 使用 ImageLayer 缓存静态矢量图层。',
   },
 
-  // Three.js
+  // ==================== Three.js ====================
   {
     id: 'three-1',
     category: 'threejs',
@@ -192,7 +192,7 @@ export const questionBank: BankQuestion[] = [
     referenceAnswer: '1. 降低几何体面数（使用 BufferGeometry）。2. 使用 InstancedMesh 批量渲染相同几何体。3. LOD 根据距离切换模型精度。4. 纹理压缩和 Mipmap。5. 视锥体裁剪和遮挡剔除。6. 使用 requestAnimationFrame 控制帧率。7. 减少光源数量，使用烘焙光照。',
   },
 
-  // AI Frontend
+  // ==================== AI 前端应用 ====================
   {
     id: 'ai-1',
     category: 'ai-frontend',

@@ -1,4 +1,4 @@
-"""Blueprint registration."""
+"""蓝图注册模块"""
 
 from flask import Blueprint
 
@@ -9,6 +9,7 @@ from .chat import chat_bp
 
 
 def register_routes(app):
+    """注册所有 API 蓝图到 Flask 应用"""
     app.register_blueprint(resume_bp, url_prefix="/api/resume")
     app.register_blueprint(interview_bp, url_prefix="/api/interview")
     app.register_blueprint(project_bp, url_prefix="/api/project")

@@ -1,6 +1,6 @@
 """
-POST /api/project/polish    — polish project description
-POST /api/project/questions — generate project deep-dive questions
+POST /api/project/polish    — 润色项目描述
+POST /api/project/questions — 生成项目深挖问题
 """
 
 from flask import Blueprint, request, jsonify
@@ -13,8 +13,10 @@ project_bp = Blueprint("project", __name__)
 @project_bp.route("/polish", methods=["POST"])
 def polish_project():
     """
-    Request:  { "project": {...} }
-    Response: { "optimizedProject": {...}, "suggestions": [...] }
+    润色项目描述
+
+    请求格式：{ "project": {...} }
+    响应格式：{ "optimizedProject": {...}, "suggestions": [...] }
     """
     data = request.get_json(silent=True) or {}
     project = data.get("project")
@@ -49,8 +51,10 @@ def polish_project():
 @project_bp.route("/questions", methods=["POST"])
 def generate_project_questions():
     """
-    Request:  { "project": {...}, "targetRole": "..." }
-    Response: { "questions": [...] }
+    生成项目深挖问题
+
+    请求格式：{ "project": {...}, "targetRole": "..." }
+    响应格式：{ "questions": [...] }
     """
     data = request.get_json(silent=True) or {}
     project = data.get("project")

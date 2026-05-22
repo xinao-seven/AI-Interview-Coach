@@ -1,8 +1,7 @@
-"""AI service — wraps OpenAI-compatible chat completion API.
+"""AI 服务模块 —— 封装 OpenAI 兼容的聊天补全 API。
 
-DeepSeek V4 defaults to thinking mode, which mixes reasoning_content
-into the output. Since our prompts ask for clean JSON, we disable
-thinking to get structured output directly.
+DeepSeek V4 默认启用思考模式，会在输出中混入 reasoning_content。
+由于我们的提示词要求输出纯净的 JSON，因此需要禁用思考模式以获取结构化输出。
 """
 
 import json
@@ -15,6 +14,7 @@ _client: OpenAI | None = None
 
 
 def get_client() -> OpenAI:
+    """获取 OpenAI 客户端单例"""
     global _client
     if _client is None:
         _client = OpenAI(api_key=Config.AI_API_KEY, base_url=Config.AI_API_BASE)
@@ -22,14 +22,17 @@ def get_client() -> OpenAI:
 
 
 def _base_params(**overrides):
-    """Common parameters shared by all completion calls."""
-    return {
+    """所有补全调用共享的基础参数"""
+    params = {
         "model": Config.AI_MODEL,
         "temperature": overrides.get("temperature", Config.TEMPERATURE),
         "max_tokens": overrides.get("max_tokens", Config.MAX_REQUEST_TOKENS),
-        # Disable thinking mode — we need clean JSON, not reasoning traces
-        "extra_body": {"thinking": {"type": "disabled"}},
     }
+    # 仅对 DeepSeek 兼容 API 禁用思考模式
+    base = (Config.AI_API_BASE or "").lower()
+    if "deepseek" in base:
+        params["extra_body"] = {"thinking": {"type": "disabled"}}
+    return params
 
 
 def chat_completion(
@@ -39,7 +42,7 @@ def chat_completion(
     temperature: float | None = None,
     max_tokens: int | None = None,
 ) -> str:
-    """Single-turn chat completion, returns raw text."""
+    """单轮聊天补全，返回原始文本"""
     client = get_client()
     params = _base_params(temperature=temperature, max_tokens=max_tokens)
     try:
@@ -63,22 +66,22 @@ def chat_completion_json(
     *,
     temperature: float | None = None,
 ) -> dict:
-    """Chat completion that returns a parsed JSON dict.
+    """聊天补全并返回解析后的 JSON 字典。
 
-    Extraction strategy (tried in order):
-    1. Direct json.loads on the full response
-    2. Extract from ```json ... ``` fence
-    3. Find the outermost { ... } pair via bracket matching
+    JSON 提取策略（按优先级依次尝试）：
+    1. 直接对完整响应调用 json.loads
+    2. 从 ```json ... ``` 代码块中提取
+    3. 通过括号匹配找到最外层的 { ... } 对
     """
     text = chat_completion(system_prompt, user_message, temperature=temperature)
 
-    # 1 — direct parse
+    # 1 — 直接解析
     try:
         return json.loads(text)
     except json.JSONDecodeError:
         pass
 
-    # 2 — code fence
+    # 2 — 从代码块中提取
     match = re.search(r"```(?:json)?\s*\n?(.*?)\n?```", text, re.DOTALL)
     if match:
         try:
@@ -86,7 +89,7 @@ def chat_completion_json(
         except json.JSONDecodeError:
             pass
 
-    # 3 — bracket-balanced JSON extraction (handles nested objects)
+    # 3 — 通过括号平衡匹配提取 JSON（处理嵌套对象）
     start = text.find("{")
     if start == -1:
         raise ValueError(f"No JSON object found in AI response: {text[:300]}...")
@@ -128,7 +131,7 @@ def chat_completion_stream(
     *,
     temperature: float | None = None,
 ):
-    """Streaming chat completion, yields text deltas."""
+    """流式聊天补全，逐块产出文本增量（生成器）"""
     client = get_client()
     params = _base_params(temperature=temperature)
     try:

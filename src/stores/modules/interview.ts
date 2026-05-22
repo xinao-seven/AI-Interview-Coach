@@ -15,6 +15,9 @@ export const useInterviewStore = defineStore('interview', () => {
   const createdAt = ref<string>('')
   const finishedAt = ref<string>('')
 
+  // 追问状态：questionId -> { 追问问题文本, 主问题答案文本 }
+  const followUpStates = ref<Record<string, { question: string; mainAnswer: string }>>({})
+
   const currentQuestion = computed(() => {
     if (currentQuestionIndex.value < questions.value.length) {
       return questions.value[currentQuestionIndex.value]
@@ -29,6 +32,30 @@ export const useInterviewStore = defineStore('interview', () => {
   const hasSession = computed(() => status.value !== 'idle')
 
   const answeredCount = computed(() => evaluations.value.length)
+
+  // 检查当前题目是否有活跃的（未回答的）追问
+  const hasActiveFollowUp = computed(() => {
+    const q = currentQuestion.value
+    if (!q) return false
+    return q.id in followUpStates.value
+  })
+
+  // 获取当前题目的活跃追问问题文本
+  const activeFollowUpQuestion = computed(() => {
+    const q = currentQuestion.value
+    if (!q) return ''
+    return followUpStates.value[q.id]?.question || ''
+  })
+
+  function setFollowUp(questionId: string, followUpQuestion: string, mainAnswer: string) {
+    followUpStates.value[questionId] = { question: followUpQuestion, mainAnswer }
+    saveToStorage()
+  }
+
+  function clearFollowUp(questionId: string) {
+    delete followUpStates.value[questionId]
+    saveToStorage()
+  }
 
   function setConfig(c: InterviewConfig) {
     config.value = c
@@ -104,6 +131,7 @@ export const useInterviewStore = defineStore('interview', () => {
     questions.value = []
     messages.value = []
     evaluations.value = []
+    followUpStates.value = {}
     currentQuestionIndex.value = 0
     sessionId.value = ''
     status.value = 'idle'
@@ -124,6 +152,7 @@ export const useInterviewStore = defineStore('interview', () => {
       status: status.value,
       createdAt: createdAt.value,
       finishedAt: finishedAt.value,
+      followUpStates: { ...followUpStates.value },
     }
     localStorage.setItem('interview-session', JSON.stringify(session))
   }
@@ -143,6 +172,7 @@ export const useInterviewStore = defineStore('interview', () => {
         status.value = session.status
         createdAt.value = session.createdAt
         finishedAt.value = session.finishedAt
+        followUpStates.value = session.followUpStates || {}
       } catch {
         resetSession()
       }
@@ -160,10 +190,13 @@ export const useInterviewStore = defineStore('interview', () => {
     status,
     createdAt,
     finishedAt,
+    followUpStates,
     currentQuestion,
     isLastQuestion,
     hasSession,
     answeredCount,
+    hasActiveFollowUp,
+    activeFollowUpQuestion,
     setConfig,
     updateConfig,
     setResumeSnapshot,
@@ -172,6 +205,8 @@ export const useInterviewStore = defineStore('interview', () => {
     updateMessage,
     addEvaluation,
     updateEvaluation,
+    setFollowUp,
+    clearFollowUp,
     nextQuestion,
     finishInterview,
     resetSession,

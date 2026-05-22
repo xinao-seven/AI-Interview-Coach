@@ -1,7 +1,7 @@
 """
-AI Interview Coach — Flask Backend
-===================================
-Entry point. Run with: python app.py
+AI 面试教练 — Flask 后端
+========================
+入口文件。运行方式：python app.py
 """
 
 from flask import Flask
@@ -11,8 +11,10 @@ from routes import register_routes
 
 
 def create_app() -> Flask:
+    """创建并配置 Flask 应用实例"""
     app = Flask(__name__)
 
+    # 配置 CORS 跨域访问
     CORS(app, resources={
         r"/api/*": {
             "origins": Config.CORS_ORIGINS.split(",") if Config.CORS_ORIGINS != "*" else "*",
@@ -22,10 +24,10 @@ def create_app() -> Flask:
         }
     })
 
-    # Register API blueprints
+    # 注册 API 路由蓝图
     register_routes(app)
 
-    # Health check
+    # 健康检查接口
     @app.route("/api/health")
     def health():
         return {"status": "ok", "model": Config.AI_MODEL}

@@ -10,7 +10,7 @@ function generateId(prefix: string): string {
   return `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
 }
 
-// 1. Parse resume
+// 1. 模拟解析简历
 export async function mockParseResume(rawText: string): Promise<ResumeInfo> {
   await delay(600)
 
@@ -44,7 +44,7 @@ export async function mockParseResume(rawText: string): Promise<ResumeInfo> {
   }
 }
 
-// 2. Generate interview questions
+// 2. 模拟生成面试题目
 export async function mockGenerateQuestions(
   _resumeInfo: ResumeInfo | null,
   config: InterviewConfig
@@ -155,7 +155,7 @@ export async function mockGenerateQuestions(
     }
   }
 
-  // Fallback: use all areas
+  // 兜底：如果按 focusAreas 筛选后没有匹配到题目，使用对应模式下的所有分类
   if (candidates.length === 0) {
     for (const [area, questions] of Object.entries(modeBank)) {
       questions.forEach((q) => candidates.push({ question: q, area }))
@@ -176,7 +176,7 @@ export async function mockGenerateQuestions(
   }))
 }
 
-// 3. Evaluate answer
+// 3. 模拟评估回答
 export async function mockEvaluateAnswer(
   _question: InterviewQuestion,
   userAnswer: string,
@@ -218,7 +218,7 @@ export async function mockEvaluateAnswer(
   }
 }
 
-// 4. Generate report
+// 4. 模拟生成面试报告
 export async function mockGenerateReport(session: InterviewSession): Promise<InterviewReport> {
   await delay(600)
 
@@ -261,7 +261,7 @@ export async function mockGenerateReport(session: InterviewSession): Promise<Int
   }
 }
 
-// 5. Polish project description
+// 5. 模拟润色项目描述
 export async function mockPolishProject(project: ResumeProject): Promise<{
   optimized: ResumeProject
   suggestions: string[]
@@ -288,7 +288,7 @@ export async function mockPolishProject(project: ResumeProject): Promise<{
   }
 }
 
-// 6. Generate project deep-dive questions
+// 6. 模拟生成项目深挖问题
 export async function mockGenerateProjectQuestions(project: ResumeProject): Promise<InterviewQuestion[]> {
   await delay(500)
 

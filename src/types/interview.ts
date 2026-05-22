@@ -51,4 +51,5 @@ export interface InterviewSession {
   status: 'idle' | 'configuring' | 'in-progress' | 'finished'
   createdAt: string
   finishedAt: string
+  followUpStates?: Record<string, { question: string; mainAnswer: string }>
 }

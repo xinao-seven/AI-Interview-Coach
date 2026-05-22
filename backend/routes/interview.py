@@ -1,7 +1,7 @@
 """
-POST /api/interview/questions — generate interview questions
-POST /api/interview/evaluate  — evaluate an answer
-POST /api/interview/report    — generate interview report
+POST /api/interview/questions — 生成面试题目
+POST /api/interview/evaluate  — 评估回答
+POST /api/interview/report    — 生成面试报告
 """
 
 from flask import Blueprint, request, jsonify
@@ -18,8 +18,10 @@ interview_bp = Blueprint("interview", __name__)
 @interview_bp.route("/questions", methods=["POST"])
 def generate_questions():
     """
-    Request:  { "resumeInfo": {...}, "config": {...} }
-    Response: { "questions": [...] }
+    生成面试题目
+
+    请求格式：{ "resumeInfo": {...}, "config": {...} }
+    响应格式：{ "questions": [...] }
     """
     data = request.get_json(silent=True) or {}
     resume_info = data.get("resumeInfo")
@@ -52,18 +54,24 @@ def generate_questions():
 @interview_bp.route("/evaluate", methods=["POST"])
 def evaluate_answer():
     """
-    Request:  { "question": {...}, "userAnswer": "...", "resumeInfo": {...} }
-    Response: { "evaluation": {...} }
+    评估回答
+
+    请求格式：
+        { "question": {...}, "userAnswer": "...", "resumeInfo": {...},
+          "followUpContext": { "isFollowUp": bool, "followUpQuestion": "...", "mainAnswer": "..." } | null }
+
+    响应格式：{ "evaluation": {...} }
     """
     data = request.get_json(silent=True) or {}
     question = data.get("question")
     user_answer = data.get("userAnswer", "")
     resume_info = data.get("resumeInfo")
+    follow_up_context = data.get("followUpContext")  # 可选，追问评估时使用
 
     if not question:
         return jsonify({"error": "question is required"}), 400
     if not user_answer.strip():
-        # Empty answer → auto zero score
+        # 空回答 → 自动零分
         return jsonify({
             "evaluation": {
                 "questionId": question.get("id"),
@@ -81,9 +89,22 @@ def evaluate_answer():
         })
 
     try:
-        evaluation = chat_completion_json(
-            system_prompt=ANSWER_EVALUATION_SYSTEM,
-            user_message=(
+        # 构建用户消息：追问场景下包含追问上下文
+        if follow_up_context and follow_up_context.get("isFollowUp"):
+            user_message = (
+                f"【追问环节】候选人已回答了主问题，现在正在回答针对其回答的追问。\n\n"
+                f"原始面试题目：{question.get('question')}\n"
+                f"题目类型：{question.get('type')}\n"
+                f"题目标签：{', '.join(question.get('tags', []))}\n"
+                f"参考答案：{question.get('referenceAnswer')}\n\n"
+                f"候选人主问题回答：\n{follow_up_context.get('mainAnswer', '')}\n\n"
+                f"面试官追问：{follow_up_context.get('followUpQuestion', '')}\n\n"
+                f"候选人对追问的回答：\n{user_answer}\n\n"
+                f"候选人简历：{resume_info}\n\n"
+                f"请针对追问的回答进行评分，重点关注候选人面对追问时的应变能力和知识深度。"
+            )
+        else:
+            user_message = (
                 f"面试题目：{question.get('question')}\n"
                 f"题目类型：{question.get('type')}\n"
                 f"题目标签：{', '.join(question.get('tags', []))}\n"
@@ -91,7 +112,11 @@ def evaluate_answer():
                 f"候选人简历：{resume_info}\n\n"
                 f"候选人回答：\n{user_answer}\n\n"
                 f"请根据以上信息进行评分。"
-            ),
+            )
+
+        evaluation = chat_completion_json(
+            system_prompt=ANSWER_EVALUATION_SYSTEM,
+            user_message=user_message,
         )
         return jsonify({"evaluation": evaluation})
     except ValueError as e:
@@ -103,8 +128,10 @@ def evaluate_answer():
 @interview_bp.route("/report", methods=["POST"])
 def generate_report():
     """
-    Request:  { "session": {...} }
-    Response: { "report": {...} }
+    生成面试报告
+
+    请求格式：{ "session": {...} }
+    响应格式：{ "report": {...} }
     """
     data = request.get_json(silent=True) or {}
     session = data.get("session")
