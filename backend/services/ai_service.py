@@ -140,12 +140,21 @@ def chat_completion_json(
 
 
 def _extract_json(text: str) -> dict:
-    """从 AI 返回文本中提取 JSON 对象（三级降级策略）。
+    """从 AI 返回文本中提取 JSON 对象（四级降级策略）。
 
-    1. 直接 json.loads
-    2. ```json ... ``` 代码块提取
-    3. 括号平衡匹配提取最外层 { ... }
+    1. <!--EVAL{...}--> 注释提取（新评分格式）
+    2. 直接 json.loads
+    3. ```json ... ``` 代码块提取
+    4. 括号平衡匹配提取最外层 { ... }
     """
+    # 0 — HTML 注释中的 EVAL JSON（优先级最高，最精准）
+    comment_match = re.search(r"<!--\s*EVAL\s*(\{[\s\S]*?\})\s*-->", text)
+    if comment_match:
+        try:
+            return json.loads(comment_match.group(1))
+        except json.JSONDecodeError:
+            pass
+
     # 1 — 直接解析
     try:
         return json.loads(text)

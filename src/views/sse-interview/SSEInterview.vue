@@ -6,8 +6,7 @@ import { useInterviewStore } from '@/stores/modules/interview'
 import { useReportStore } from '@/stores/modules/report'
 import { useResumeStore } from '@/stores/modules/resume'
 import { useHistoryStore } from '@/stores/modules/history'
-import { evaluateAnswerApi, generateReportApi } from '@/api/modules/ai'
-import { simulateStream } from '@/utils/sse'
+import { evaluateAnswerStreamApi, generateReportApi } from '@/api/modules/ai'
 import MarkdownRenderer from '@/components/MarkdownRenderer.vue'
 import VirtualChatList from '@/components/VirtualChatList.vue'
 import type { ChatMessage, AnswerEvaluation } from '@/types/interview'
@@ -28,6 +27,12 @@ const hintText = ref('')
 const virtualListRef = ref<InstanceType<typeof VirtualChatList> | null>(null)
 const submitting = ref(false)
 let stopStreamFn: (() => void) | null = null
+let _msgSeq = 0  // 全局消息序号，防止 Date.now() 毫秒级碰撞导致消息覆盖
+
+/** 生成唯一消息 ID */
+function _nextMsgId(): string {
+    return `msg-${Date.now()}-${++_msgSeq}`
+}
 
 const currentQuestion = computed(() => interviewStore.currentQuestion)
 const isLastQuestion = computed(() => interviewStore.isLastQuestion)
@@ -96,51 +101,16 @@ function scrollToBottom() {
 async function showCurrentQuestion() {
     if (!currentQuestion.value) return
 
-    // Add placeholder message
-    const msgId = `msg-${Date.now()}`
     const msg: ChatMessage = {
-        id: msgId,
+        id: _nextMsgId(),
         role: 'interviewer',
-        content: '',
+        content: currentQuestion.value.question,
         createdAt: new Date().toISOString(),
         questionId: currentQuestion.value.id,
-        status: 'streaming',
+        status: 'done',
     }
     interviewStore.addMessage(msg)
     scrollToBottom()
-
-    // Stream the question text with a thinking phase first
-    streaming.value = true
-    streamingText.value = ''
-
-    const fullText = currentQuestion.value.question
-
-    // 模拟面试官的思考过程
-    const reasoning = generateQuestionReasoning(currentQuestion.value)
-
-    stopStreamFn = simulateStream(fullText, {
-        onMessage: (chunk) => {
-            streamingText.value += chunk
-            interviewStore.updateMessage(msgId, streamingText.value, 'streaming')
-            scrollToBottom()
-        },
-        onDone: () => {
-            interviewStore.updateMessage(msgId, streamingText.value, 'done')
-            streaming.value = false
-            streamingText.value = ''
-            stopStreamFn = null
-            scrollToBottom()
-        },
-        onError: () => {
-            interviewStore.updateMessage(msgId, fullText, 'done')
-            streaming.value = false
-            streamingText.value = ''
-            stopStreamFn = null
-        },
-    }, {
-        reasoningText: reasoning,
-        reasoningSpeed: 2.0,
-    })
 }
 
 async function handleSubmit() {
@@ -152,7 +122,7 @@ async function handleSubmit() {
     const followUpQ = interviewStore.activeFollowUpQuestion
 
     const userMsg: ChatMessage = {
-        id: `msg-${Date.now()}`,
+        id: _nextMsgId(),
         role: 'user',
         content: answerText.value.trim(),
         createdAt: new Date().toISOString(),
@@ -170,7 +140,6 @@ async function handleSubmit() {
     try {
         resumeStore.loadFromStorage()
 
-        // Build follow-up context if answering a follow-up
         const followUpContext = isFollowUpAnswer
             ? {
                 isFollowUp: true,
@@ -179,16 +148,8 @@ async function handleSubmit() {
             }
             : undefined
 
-        const evaluation = await evaluateAnswerApi(
-            currentQuestion.value,
-            userAnswer,
-            resumeStore.resumeInfo,
-            followUpContext
-        )
-        interviewStore.addEvaluation(evaluation)
-
-        // Stream evaluation result
-        const evalMsgId = `msg-${Date.now()}`
+        // 创建评分结果消息（先空壳，流式填充）
+        const evalMsgId = _nextMsgId()
         const evalMsg: ChatMessage = {
             id: evalMsgId,
             role: 'system',
@@ -199,54 +160,33 @@ async function handleSubmit() {
         }
         interviewStore.addMessage(evalMsg)
 
-        const evalText = formatEvaluation(evaluation, isFollowUpAnswer)
-
         streaming.value = true
         streamingText.value = ''
 
-        stopStreamFn = simulateStream(evalText, {
-            onMessage: (chunk) => {
-                streamingText.value += chunk
-                interviewStore.updateMessage(evalMsgId, streamingText.value, 'streaming')
-                scrollToBottom()
+        const controller = evaluateAnswerStreamApi(
+            currentQuestion.value,
+            userAnswer,
+            resumeStore.resumeInfo,
+            {
+                onChunk: (_chunk) => {
+                    streamingText.value += _chunk
+                    interviewStore.updateMessage(evalMsgId, streamingText.value, 'streaming')
+                    scrollToBottom()
+                },
+                onDone: (evaluation) => {
+                    interviewStore.addEvaluation(evaluation)
+                    interviewStore.updateMessage(evalMsgId, streamingText.value, 'done')
+                    finishStreaming(evaluation, isFollowUpAnswer)
+                },
+                onError: (err) => {
+                    ElMessage.error('评分失败: ' + err.message)
+                    interviewStore.updateMessage(evalMsgId, streamingText.value || '评分失败，请重试', 'error')
+                    finishStreamingError()
+                },
             },
-            onDone: () => {
-                interviewStore.updateMessage(evalMsgId, streamingText.value, 'done')
-                streaming.value = false
-                streamingText.value = ''
-                stopStreamFn = null
-
-                // After evaluation streaming is done:
-                if (!isFollowUpAnswer && evaluation.followUpQuestion) {
-                    // Main answer has a follow-up → show it as interviewer message
-                    showFollowUpQuestion(evaluation.followUpQuestion)
-                } else if (isFollowUpAnswer) {
-                    // Follow-up answer evaluated → clear follow-up state, then auto-advance
-                    interviewStore.clearFollowUp(currentQuestion.value!.id)
-                    scheduleAutoAdvance()
-                } else {
-                    // Main answer, no follow-up → auto-advance to next question
-                    scheduleAutoAdvance()
-                }
-
-                scrollToBottom()
-            },
-            onError: () => {
-                interviewStore.updateMessage(evalMsgId, evalText, 'done')
-                streaming.value = false
-                streamingText.value = ''
-                stopStreamFn = null
-
-                if (!isFollowUpAnswer && evaluation.followUpQuestion) {
-                    showFollowUpQuestion(evaluation.followUpQuestion)
-                } else if (isFollowUpAnswer) {
-                    interviewStore.clearFollowUp(currentQuestion.value!.id)
-                    scheduleAutoAdvance()
-                } else {
-                    scheduleAutoAdvance()
-                }
-            },
-        })
+            followUpContext
+        )
+        stopStreamFn = () => controller.abort()
     } catch {
         ElMessage.error('评分失败，请重试')
     } finally {
@@ -254,6 +194,32 @@ async function handleSubmit() {
         submitting.value = false
         showingHint.value = false
     }
+}
+
+/** 流式输出完成后的统一收尾 */
+function finishStreaming(evaluation: AnswerEvaluation, isFollowUpAnswer: boolean) {
+    streaming.value = false
+    streamingText.value = ''
+    stopStreamFn = null
+
+    if (!isFollowUpAnswer && evaluation.followUpQuestion) {
+        showFollowUpQuestion(evaluation.followUpQuestion)
+    } else if (isFollowUpAnswer) {
+        interviewStore.clearFollowUp(currentQuestion.value!.id)
+        scheduleAutoAdvance()
+    } else {
+        scheduleAutoAdvance()
+    }
+    scrollToBottom()
+}
+
+/** 流式出错收尾 */
+function finishStreamingError() {
+    streaming.value = false
+    streamingText.value = ''
+    stopStreamFn = null
+    evaluating.value = false
+    submitting.value = false
 }
 
 /** Show the follow-up question as an interviewer chat message and activate follow-up state */
@@ -271,7 +237,7 @@ function showFollowUpQuestion(followUpText: string) {
 
     // Show follow-up as interviewer message
     const followUpMsg: ChatMessage = {
-        id: `msg-${Date.now()}`,
+        id: _nextMsgId(),
         role: 'interviewer',
         content: `**💬 追问：**\n${followUpText}`,
         createdAt: new Date().toISOString(),
@@ -309,7 +275,7 @@ function handleSkip() {
     const isFollowUpSkip = interviewStore.hasActiveFollowUp
 
     const userMsg: ChatMessage = {
-        id: `msg-${Date.now()}`,
+        id: _nextMsgId(),
         role: 'user',
         content: isFollowUpSkip ? '（我不会这道追问）' : '（我不会这道题）',
         createdAt: new Date().toISOString(),
@@ -339,9 +305,11 @@ function handleSkip() {
     }
 
     const evalMsg: ChatMessage = {
-        id: `msg-${Date.now()}`,
+        id: _nextMsgId(),
         role: 'system',
-        content: formatEvaluation(evaluation, isFollowUpSkip),
+        content: isFollowUpSkip
+            ? '追问未能作答，请参考下方参考答案加强复习。\n\n**📝 参考答案：**\n' + currentQuestion.value.referenceAnswer
+            : '未能作答，建议重点复习该知识点。\n\n**📝 参考答案：**\n' + currentQuestion.value.referenceAnswer,
         createdAt: new Date().toISOString(),
         questionId: currentQuestion.value.id,
         status: 'done',
@@ -434,41 +402,7 @@ async function handleFinish() {
     }
 }
 
-function formatEvaluation(evaluation: AnswerEvaluation, isFollowUp = false): string {
-    const stars = evaluation.totalScore >= 85 ? '⭐⭐⭐⭐⭐' :
-        evaluation.totalScore >= 70 ? '⭐⭐⭐⭐' :
-            evaluation.totalScore >= 60 ? '⭐⭐⭐' :
-                evaluation.totalScore >= 40 ? '⭐⭐' : '⭐'
 
-    const title = isFollowUp ? '## 📊 追问评分' : '## 📊 当前回答评分'
-
-    // 构建思考过程块（来自 AI 的 reasoning）
-    const thinkingBlock = evaluation.thinking
-        ? `<thinking>\n${evaluation.thinking}\n</thinking>\n\n`
-        : ''
-
-    return `${thinkingBlock}${title}
-
-| 维度 | 得分 |
-|------|------|
-| 总分 | **${evaluation.totalScore}** ${stars} |
-| 准确性 | ${evaluation.accuracy} |
-| 完整性 | ${evaluation.completeness} |
-| 表达能力 | ${evaluation.expression} |
-| 项目结合度 | ${evaluation.projectRelevance} |
-| 回答深度 | ${evaluation.depth} |
-
-**✅ 优点：**
-${evaluation.strengths.length ? evaluation.strengths.map((s) => `- ${s}`).join('\n') : '- 暂无'}
-
-**⚠️ 不足：**
-${evaluation.weaknesses.length ? evaluation.weaknesses.map((w) => `- ${w}`).join('\n') : '- 暂无'}
-
-**📝 优化建议：**
-${evaluation.improvedAnswer}
-
-${!isFollowUp && evaluation.followUpQuestion ? `**💬 追问：**\n${evaluation.followUpQuestion}` : ''}`
-}
 
 function generateHint(question: NonNullable<typeof currentQuestion.value>): string {
     if (!question) return '💡 提示：先给出核心结论，再展开论述。'
@@ -493,30 +427,7 @@ function generateHint(question: NonNullable<typeof currentQuestion.value>): stri
     return '💡 提示：先给出核心结论，再展开论述；多用具体例子，避免空泛表达。'
 }
 
-/**
- * 生成题目的模拟推理过程（Mock 模式下展示思考折叠效果）
- */
-function generateQuestionReasoning(question: NonNullable<typeof currentQuestion.value>): string {
-    if (!question) return ''
-    const tagStr = question.tags.join('、')
-    const lines = [
-        `分析本题考察方向：${tagStr}`,
-        `难度级别：${question.difficulty === 'hard' ? '困难' : question.difficulty === 'easy' ? '基础' : '中等'}`,
-        `题型：${question.type === 'project-deep' ? '项目深挖，需结合简历项目经验' : '技术基础，考察核心概念理解'}`,
-    ]
-    if (question.type === 'project-deep') {
-        lines.push('准备从候选人的项目经历出发，追问技术选型和架构设计细节')
-    } else {
-        lines.push('准备考察候选人对此概念的理解深度和实际应用经验')
-    }
-    return lines.join('\n\n')
-}
 
-function getCurrentEvaluation() {
-    const q = currentQuestion.value
-    if (!q) return null
-    return interviewStore.evaluations.find((e) => e.questionId === q.id) || null
-}
 
 function saveInterviewHistory(report: InterviewReport | null) {
     // 统一通过 historyStore 保存，支持完整回看
@@ -611,12 +522,12 @@ const modeLabel = computed(() => {
                         <div class="stat-item">
                             <span class="stat-label">已完成</span>
                             <span class="stat-value">{{interviewStore.evaluations.filter(e => e.totalScore > 0).length
-                                }} 题</span>
+                            }} 题</span>
                         </div>
                         <div class="stat-item">
                             <span class="stat-label">跳过</span>
                             <span class="stat-value">{{interviewStore.evaluations.filter(e => e.totalScore ===
-                                0).length }} 题</span>
+                                0).length}} 题</span>
                         </div>
                     </div>
 
@@ -626,7 +537,7 @@ const modeLabel = computed(() => {
                             <el-tag size="small"
                                 :type="currentQuestion.difficulty === 'hard' ? 'danger' : currentQuestion.difficulty === 'easy' ? 'success' : 'warning'">
                                 {{ currentQuestion.difficulty === 'hard' ? '困难' : currentQuestion.difficulty === 'easy'
-                                ? '简单' : '中等' }}
+                                    ? '简单' : '中等' }}
                             </el-tag>
                         </div>
                         <div class="stat-item">
@@ -670,15 +581,10 @@ const modeLabel = computed(() => {
                 </el-card>
             </div>
 
-            <!-- Center: Chat Area with Virtual List -->
+            <!-- Center: Chat Area with Virtual List (full width) -->
             <div class="interview-center">
-                <VirtualChatList
-                    ref="virtualListRef"
-                    :items="interviewStore.messages"
-                    :estimated-item-height="80"
-                    :stick-to-bottom="true"
-                    class="chat-area"
-                >
+                <VirtualChatList ref="virtualListRef" :items="interviewStore.messages" :estimated-item-height="80"
+                    :stick-to-bottom="true" class="chat-area">
                     <template #default="{ item: msg }">
                         <div class="chat-message" :class="`msg-${(msg as ChatMessage).role}`">
                             <div class="msg-avatar">
@@ -688,13 +594,11 @@ const modeLabel = computed(() => {
                             </div>
                             <div class="msg-bubble" :class="`bubble-${(msg as ChatMessage).role}`">
                                 <div class="msg-content">
-                                    <MarkdownRenderer
-                                        v-if="(msg as ChatMessage).content"
-                                        :content="(msg as ChatMessage).content"
-                                        variant="chat"
-                                        :enable-thinking-fold="true"
-                                    />
-                                    <span v-if="(msg as ChatMessage).status === 'streaming'" class="streaming-cursor">▍</span>
+                                    <MarkdownRenderer v-if="(msg as ChatMessage).content"
+                                        :content="(msg as ChatMessage).content" variant="chat"
+                                        :enable-thinking-fold="true" />
+                                    <span v-if="(msg as ChatMessage).status === 'streaming'"
+                                        class="streaming-cursor">▍</span>
                                 </div>
                             </div>
                         </div>
@@ -752,84 +656,11 @@ const modeLabel = computed(() => {
 
                 <!-- Next/Finish after answering -->
                 <div v-else class="next-action-bar">
-                    <div class="next-info">
-                        <template v-if="getCurrentEvaluation()">
-                            得分：{{ getCurrentEvaluation()?.totalScore }} 分
-                        </template>
-                    </div>
+                    <span class="next-info">已收到评价，继续面试</span>
                     <el-button type="primary" @click="handleNextQuestion" :disabled="streaming">
                         {{ isLastQuestion ? '结束面试，查看报告' : '下一题' }}
                     </el-button>
                 </div>
-            </div>
-
-            <!-- Right: Question Info -->
-            <div class="interview-right">
-                <el-card shadow="never" class="info-card">
-                    <template #header>
-                        <span>题目辅助信息</span>
-                    </template>
-
-                    <div v-if="currentQuestion" class="info-content">
-                        <div class="info-section">
-                            <div class="info-label">考察点</div>
-                            <div class="info-text">
-                                {{ currentQuestion.tags.join('、') }} 相关知识点
-                            </div>
-                        </div>
-
-                        <div class="info-section">
-                            <div class="info-label">题型</div>
-                            <div class="info-text">
-                                {{ currentQuestion.type === 'tech-basic' ? '技术基础' :
-                                    currentQuestion.type === 'project-deep' ? '项目深挖' :
-                                        currentQuestion.type === 'baguwen' ? '八股文' :
-                                            currentQuestion.type === 'scenario' ? '场景题' : '综合题' }}
-                            </div>
-                        </div>
-
-                        <div class="info-section">
-                            <div class="info-label">参考思路</div>
-                            <div class="info-text">
-                                请先尝试独立作答，回答后系统会给出详细评分和参考答案。
-                            </div>
-                        </div>
-
-                        <div v-if="getCurrentEvaluation()" class="score-card">
-                            <el-divider />
-                            <div class="info-label">当前评分</div>
-                            <div class="score-total">
-                                {{ getCurrentEvaluation()?.totalScore }}
-                                <span class="score-unit">分</span>
-                            </div>
-                            <div class="score-details">
-                                <div class="score-row">
-                                    <span>准确性</span>
-                                    <el-progress :percentage="getCurrentEvaluation()?.accuracy || 0"
-                                        :stroke-width="6" />
-                                </div>
-                                <div class="score-row">
-                                    <span>完整性</span>
-                                    <el-progress :percentage="getCurrentEvaluation()?.completeness || 0"
-                                        :stroke-width="6" />
-                                </div>
-                                <div class="score-row">
-                                    <span>表达能力</span>
-                                    <el-progress :percentage="getCurrentEvaluation()?.expression || 0"
-                                        :stroke-width="6" />
-                                </div>
-                                <div class="score-row">
-                                    <span>回答深度</span>
-                                    <el-progress :percentage="getCurrentEvaluation()?.depth || 0" :stroke-width="6" />
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-
-                    <div v-else class="info-empty">
-                        <p>暂无题目信息</p>
-                    </div>
-                </el-card>
             </div>
         </template>
     </div>
@@ -1001,7 +832,7 @@ const modeLabel = computed(() => {
     background: #fff;
     padding: 10px 18px;
     border-radius: 20px;
-    box-shadow: 0 2px 8px rgba(0,0,0,.08);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, .08);
     font-size: 13px;
     color: #909399;
     z-index: 5;
@@ -1187,77 +1018,5 @@ const modeLabel = computed(() => {
     font-size: 14px;
     color: #67c23a;
     font-weight: 500;
-}
-
-/* Right Panel */
-.interview-right {
-    width: 280px;
-    flex-shrink: 0;
-}
-
-.info-card {
-    height: 100%;
-    overflow-y: auto;
-}
-
-.info-section {
-    margin-bottom: 16px;
-}
-
-.info-label {
-    font-size: 13px;
-    color: #909399;
-    margin-bottom: 4px;
-}
-
-.info-text {
-    font-size: 14px;
-    color: #303133;
-    line-height: 1.6;
-}
-
-.score-card {
-    margin-top: 12px;
-}
-
-.score-total {
-    font-size: 36px;
-    font-weight: 700;
-    color: #409eff;
-    text-align: center;
-    margin: 8px 0;
-}
-
-.score-unit {
-    font-size: 16px;
-    color: #909399;
-}
-
-.score-details {
-    margin-top: 8px;
-}
-
-.score-row {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    margin-bottom: 8px;
-    font-size: 12px;
-    color: #606266;
-}
-
-.score-row span {
-    width: 56px;
-    flex-shrink: 0;
-}
-
-.score-row .el-progress {
-    flex: 1;
-}
-
-.info-empty {
-    text-align: center;
-    color: #909399;
-    padding: 40px 0;
 }
 </style>

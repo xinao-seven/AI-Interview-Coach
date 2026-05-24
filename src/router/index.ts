@@ -28,7 +28,7 @@ const routes: RouteRecordRaw[] = [
             {
                 path: 'mock-interview',
                 name: 'MockInterview',
-                component: () => import('@/views/mock-interview/MockInterview.vue'),
+                component: () => import('@/views/sse-interview/SSEInterview.vue'),
                 meta: { title: '模拟面试' },
             },
             {

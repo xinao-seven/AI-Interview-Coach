@@ -8,8 +8,8 @@ from flask import Flask
 from flask_cors import CORS
 from config import Config
 from routes import register_routes
-
-
+import sys
+sys.stdout.flush()
 def create_app() -> Flask:
     """创建并配置 Flask 应用实例"""
     app = Flask(__name__)
